@@ -12,17 +12,7 @@ router = APIRouter()
 
 @router.post("/patients/", status_code=status.HTTP_201_CREATED)
 async def create_patients(patient : PatientCreate, db: Annotated[Session, Depends(get_db)]):
-    new_patient = Patient(
-        name = patient.name,
-        date_of_birth = patient.date_of_birth,
-        address = patient.address,
-        city = patient.city,
-        state = patient.state,
-        zip_code = patient.zip_code,
-        phone_number = patient.phone_number,
-        email = patient.email,
-        medical_history = patient.medical_history,  
-    )
+    new_patient = Patient(**patient.model_dump())
     db.add(new_patient)
     db.commit()
     db.refresh(new_patient)
