@@ -11,78 +11,45 @@ from schemas.schema import PatientCreate
 router = APIRouter()
 
 @router.post("/patients/", status_code=status.HTTP_201_CREATED)
-async def create_patients(patient : PatientCreate, db: Annotated[Session, Depends(get_db)]):
+async def create_patients(patient: PatientCreate, db: Annotated[Session, Depends(get_db)]):
     new_patient = Patient(**patient.model_dump())
     db.add(new_patient)
     db.commit()
     db.refresh(new_patient)
-    
     if not new_patient:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create patient."
-        )
-    
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create patient.")
     return new_patient
 
 @router.get("/patients", status_code=status.HTTP_200_OK, response_model=List[PatientCreate])
-async def get_all_patients(db : Annotated[Session, Depends(get_db)]):
-    patient = db.query(Patient).all()
+async def get_all_patients(db: Annotated[Session, Depends(get_db)]):
+    patients = db.query(Patient).all()
+    if not patients:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No patients found.")
+    return patients
+
+@router.get("/patients/{patient_id}", response_model=PatientCreate, status_code=status.HTTP_200_OK)
+async def get_patient(patient_id: uuid.UUID, db: Annotated[Session, Depends(get_db)]):
+    patient = db.query(Patient).filter(Patient.patient_id == patient_id).first()
     if not patient:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No patients found."
-        )
-    
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found.")
     return patient
 
-@router.get("/patients/{patient_id}",response_model=PatientCreate, status_code=status.HTTP_200_OK)
-async def get_patient(patient_id: uuid.UUID, db : Annotated[Session, Depends(get_db)]):
-    try:
-        patient = db.query(Patient).filter(Patient.patient_id == patient_id).first()
-    except SQLAlchemyError as e:
-        print(e)
-        return None
-    return patient
+@router.put("/patients/{patient_id}", status_code=status.HTTP_202_ACCEPTED)
+async def update_patient(patient_id: uuid.UUID, patient: PatientCreate, db: Annotated[Session, Depends(get_db)]):
+    update_patient = db.query(Patient).filter(Patient.patient_id == patient_id).first()
+    if not update_patient:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Patient not found.')
+    for key, value in patient.model_dump().items():
+        setattr(update_patient, key, value)
+    db.commit()
+    db.refresh(update_patient)
+    return update_patient
 
-@router.put("/patients/{patient_id}",status_code=status.HTTP_202_ACCEPTED)
-async def update_patient(patient_id : uuid.UUID, patient : PatientCreate, db : Annotated[Session, Depends(get_db)]):
-    try:
-        update_patient = db.query(Patient).filter(Patient.patient_id == patient_id).first()
-        if update_patient is None:
-            raise HTTPException(status_code=404, detail='Patient not found.')
-        update_patient.name = patient.name,
-        update_patient.date_of_birth = patient.date_of_birth,
-        update_patient.address = patient.address,
-        update_patient.city = patient.city,
-        update_patient.state = patient.state,
-        update_patient.zip_code = patient.zip_code,
-        update_patient.phone_number = patient.phone_number,
-        update_patient.email = patient.email,
-        update_patient.medical_history = patient.medical_history
-
-        db.add(update_patient)
-        db.commit()
-        db.refresh(update_patient)
-    except SQLAlchemyError as e:
-        db.rollback() 
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update {Patient.__name__}. Error : {str(e)}"
-        )       
-        
-@router.delete("/patients{patient_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_patient(patient_id : uuid.UUID, db : Annotated[Session, Depends(get_db)]):
-    try:
-        patient = db.query(Patient).filter(Patient.patient_id == patient_id).first()
-        if not patient:
-                return False
-        db.delete(patient)
-        db.commit()
-        return True
-    except SQLAlchemyError as e:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete {Patient.__name__}. Error: {str(e)}"
-        )
+@router.delete("/patients/{patient_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_patient(patient_id: uuid.UUID, db: Annotated[Session, Depends(get_db)]):
+    patient = db.query(Patient).filter(Patient.patient_id == patient_id).first()
+    if not patient:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found.")
+    db.delete(patient)
+    db.commit()
+    return {"detail": "Patient deleted successfully"}
